@@ -1,0 +1,27 @@
+# Core dependencies
+python-telegram-bot==20.7
+aiohttp==3.9.1
+python-dotenv==1.0.0
+
+# Utilities
+requests==2.31.0
+redis==5.0.1
+
+# LLM Integration
+anthropic==0.39.0
+
+# Document Management & OCR
+pillow==10.1.0
+pytesseract==0.3.10
+google-api-python-client==2.108.0
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.0
+
+# Scheduling
+apscheduler==3.10.4
+
+# PDF Generation
+reportlab==4.0.7
+
+# Database
+# SQLite is built-in to Python

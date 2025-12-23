@@ -1,0 +1,4 @@
+  File "/Users/naouri/Bot/homeai_bot.py", line 167
+    """
+       ^
+SyntaxError: f-string expression part cannot include a backslash

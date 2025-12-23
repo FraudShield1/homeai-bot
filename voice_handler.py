@@ -1,6 +1,6 @@
 """
 Voice Message Handler for HomeAI Bot
-Transcribes voice messages using OpenAI Whisper API
+Transcribes voice messages using Google Gemini 1.5 Flash (Free & Business Grade)
 """
 
 import os
@@ -9,208 +9,96 @@ from typing import Optional
 from pathlib import Path
 
 try:
-    from openai import AsyncOpenAI
-    WHISPER_AVAILABLE = True
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
 except ImportError:
-    WHISPER_AVAILABLE = False
-    logging.warning("Voice transcription not available - install openai")
+    GEMINI_AVAILABLE = False
+    logging.warning("Gemini not available - install google-generativeai")
 
 logger = logging.getLogger(__name__)
 
 
 class VoiceHandler:
-    """Handles voice message transcription"""
+    """Handles voice message transcription using Gemini"""
     
     def __init__(self, api_key: Optional[str] = None):
         """
-        Initialize voice handler
-        
-        Args:
-            api_key: OpenAI API key for Whisper
+        Initialize voice handler with Google Gemini
         """
         self.enabled = False
-        self.api_key = api_key or os.getenv('OPENAI_API_KEY')
+        self.api_key = api_key or os.getenv('GOOGLE_API_KEY')
         
-        if self.api_key and WHISPER_AVAILABLE:
+        if self.api_key and GEMINI_AVAILABLE:
             try:
-                self.client = AsyncOpenAI(api_key=self.api_key)
+                genai.configure(api_key=self.api_key)
+                self.model = genai.GenerativeModel('gemini-1.5-flash')
                 self.enabled = True
-                logger.info("Voice handler initialized with OpenAI Whisper")
+                logger.info("Voice handler initialized with Google Gemini (Free Tier)")
             except Exception as e:
-                logger.error(f"Error initializing Whisper: {e}")
+                logger.error(f"Error initializing Gemini Voice: {e}")
         else:
-            logger.warning("Voice transcription disabled (no API key or library missing)")
+            logger.warning("Voice transcription disabled (no Google API key)")
     
     async def transcribe(self, audio_path: str, language: str = None) -> Optional[str]:
         """
-        Transcribe audio file to text
-        
-        Args:
-            audio_path: Path to audio file
-            language: Optional language code (e.g., 'en', 'fr')
-            
-        Returns:
-            Transcribed text or None
+        Transcribe audio file to text using Gemini Vision/Audio capabilities
         """
         if not self.enabled:
             return None
         
         try:
-            # Open audio file
-            with open(audio_path, 'rb') as audio_file:
-                # Transcribe using Whisper
-                params = {
-                    "model": "whisper-1",
-                    "file": audio_file
-                }
-                
-                if language:
-                    params["language"] = language
-                
-                transcript = await self.client.audio.transcriptions.create(**params)
-                
-                text = transcript.text
-                logger.info(f"Transcribed audio: {text[:50]}...")
-                return text
-                
-        except Exception as e:
-            logger.error(f"Transcription error: {e}")
-            return None
-    
-    async def transcribe_with_timestamps(self, audio_path: str) -> Optional[dict]:
-        """
-        Transcribe with word-level timestamps
-        
-        Args:
-            audio_path: Path to audio file
+            # Upload the audio file to Gemini
+            # Note: For efficiency in a bot, we might need a temporary upload
+            # But Gemini 1.5 Flash accepts audio directly in some client versions
+            # We will use the standard file API
             
-        Returns:
-            Dictionary with text and timestamps
-        """
-        if not self.enabled:
-            return None
-        
-        try:
-            with open(audio_path, 'rb') as audio_file:
-                transcript = await self.client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file,
-                    response_format="verbose_json",
-                    timestamp_granularities=["word"]
-                )
-                
-                return {
-                    "text": transcript.text,
-                    "language": transcript.language,
-                    "duration": transcript.duration,
-                    "words": transcript.words if hasattr(transcript, 'words') else []
-                }
+            audio_file = genai.upload_file(path=audio_path)
+            
+            prompt = "Transcribe this audio file exactly as spoken. Do not add any commentary."
+            
+            response = self.model.generate_content([prompt, audio_file])
+            
+            # Clean up (optional, good practice)
+            # audio_file.delete() 
+            
+            text = response.text.strip()
+            logger.info(f"Gemini transcribed: {text[:50]}...")
+            return text
                 
         except Exception as e:
-            logger.error(f"Transcription with timestamps error: {e}")
+            logger.error(f"Gemini transcription error: {e}")
             return None
     
     def get_supported_formats(self) -> list:
-        """
-        Get list of supported audio formats
-        
-        Returns:
-            List of supported file extensions
-        """
-        return ['.mp3', '.mp4', '.mpeg', '.mpga', '.m4a', '.wav', '.webm', '.ogg']
+        return ['.mp3', '.wav', '.aac', '.ogg', '.m4a']
     
     def is_supported_format(self, filename: str) -> bool:
-        """
-        Check if audio format is supported
-        
-        Args:
-            filename: Audio filename
-            
-        Returns:
-            True if format is supported
-        """
         ext = Path(filename).suffix.lower()
         return ext in self.get_supported_formats()
 
 
 class VoiceCommandProcessor:
-    """Processes voice commands with context awareness"""
+    """Processes voice commands"""
     
     def __init__(self, voice_handler: VoiceHandler):
-        """
-        Initialize voice command processor
-        
-        Args:
-            voice_handler: VoiceHandler instance
-        """
         self.voice_handler = voice_handler
     
     async def process_voice_message(self, audio_path: str, user_context: dict = None) -> dict:
-        """
-        Process voice message and extract command
-        
-        Args:
-            audio_path: Path to audio file
-            user_context: Optional user context
-            
-        Returns:
-            Dictionary with transcription and metadata
-        """
         if not self.voice_handler.enabled:
-            return {
-                "success": False,
-                "error": "Voice transcription not available"
-            }
+            return {"success": False, "error": "Voice disabled"}
         
         try:
-            # Transcribe audio
             text = await self.voice_handler.transcribe(audio_path)
             
             if not text:
-                return {
-                    "success": False,
-                    "error": "Failed to transcribe audio"
-                }
+                return {"success": False, "error": "Transcription failed"}
             
-            # Detect language and confidence
-            result = {
+            return {
                 "success": True,
                 "text": text,
-                "length": len(text),
                 "word_count": len(text.split()),
                 "audio_path": audio_path
             }
             
-            # Add context if available
-            if user_context:
-                result["context"] = user_context
-            
-            return result
-            
         except Exception as e:
-            logger.error(f"Voice processing error: {e}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
-    
-    def format_transcription(self, result: dict) -> str:
-        """
-        Format transcription result for display
-        
-        Args:
-            result: Transcription result
-            
-        Returns:
-            Formatted string
-        """
-        if not result.get("success"):
-            return f"❌ Error: {result.get('error', 'Unknown error')}"
-        
-        text = result.get("text", "")
-        word_count = result.get("word_count", 0)
-        
-        formatted = f"🎤 **Transcribed:**\n\n_{text}_\n\n"
-        formatted += f"📊 {word_count} words"
-        
-        return formatted
+            return {"success": False, "error": str(e)}

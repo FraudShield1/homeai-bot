@@ -222,8 +222,29 @@ Format as a clear, actionable report for a homeowner."""
             return None
         
         try:
-            system_prompt = """You are a helpful smart home assistant. Respond naturally and helpfully to user queries.
-            
+            if self.provider == 'gemini':
+                # GEMINI IMPLEMENTATION
+                system_prompt = """You are a helpful smart home assistant. Respond naturally and helpfully to user queries.
+                
+You have access to the current home state and can provide information about:
+- Device states (lights, temperature, locks, etc.)
+- Energy usage
+- Automation suggestions
+- Troubleshooting help
+
+Be concise, friendly, and actionable. Use emojis sparingly for clarity.
+"""
+                context_str = json.dumps(context, indent=2)
+                full_prompt = f"{system_prompt}\n\nUser says: \"{user_message}\"\n\nCurrent home state:\n{context_str}"
+                
+                response = self.client.generate_content(full_prompt)
+                self.daily_calls += 1
+                return response.text
+
+            else:
+                # ANTHROPIC IMPLEMENTATION
+                system_prompt = """You are a helpful smart home assistant. Respond naturally and helpfully to user queries.
+                
 You have access to the current home state and can provide information about:
 - Device states (lights, temperature, locks, etc.)
 - Energy usage
@@ -232,20 +253,20 @@ You have access to the current home state and can provide information about:
 
 Be concise, friendly, and actionable. Use emojis sparingly for clarity."""
 
-            context_str = json.dumps(context, indent=2)
-            
-            response = await self.client.messages.create(
-                model=self.model,
-                max_tokens=1000,
-                system=system_prompt,
-                messages=[{
-                    "role": "user",
-                    "content": f"User says: \"{user_message}\"\n\nCurrent home state:\n{context_str}"
-                }]
-            )
-            
-            self.daily_calls += 1
-            return response.content[0].text
+                context_str = json.dumps(context, indent=2)
+                
+                response = await self.client.messages.create(
+                    model=self.model,
+                    max_tokens=1000,
+                    system=system_prompt,
+                    messages=[{
+                        "role": "user",
+                        "content": f"User says: \"{user_message}\"\n\nCurrent home state:\n{context_str}"
+                    }]
+                )
+                
+                self.daily_calls += 1
+                return response.content[0].text
             
         except Exception as e:
             logger.error(f"Error generating smart response: {e}")

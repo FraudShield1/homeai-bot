@@ -25,3 +25,4 @@ reportlab==4.0.7
 
 # Database
 # SQLite is built-in to Python
+google-generativeai
